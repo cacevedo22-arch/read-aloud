@@ -11,8 +11,12 @@ let package = Package(
     name: "SherpaTts",
     platforms: [.iOS(.v14)],
     products: [
+        // Dynamic: as a static lib the linker dead-strips SherpaTtsPlugin,
+        // because nothing references it directly - Capacitor only finds plugins
+        // by scanning the ObjC runtime, so the class must actually be loaded.
         .library(
             name: "SherpaTts",
+            type: .dynamic,
             targets: ["SherpaTts"])
     ],
     dependencies: [
