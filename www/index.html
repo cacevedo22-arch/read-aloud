@@ -366,15 +366,22 @@ $('test').onclick = () => {
     unlockAudio();
     statusEl.textContent = 'Synthesizing sample…';
     const el = current();
-    audioUrlFor(SAMPLE).then(u => { el.src = u; el.play().catch(() => {}); });
     el.playbackRate = +$('rate').value;
     el.onended = () => { statusEl.textContent = 'Sample finished'; };
     el.onerror = () => {
       noteEl.hidden = false;
-      noteEl.textContent = 'No answer from the PC voice server — is Start Server.cmd running?';
+      noteEl.textContent = NATIVE
+        ? 'On-device voice failed to play that clip'
+        : 'No answer from the PC voice server — is Start Server.cmd running?';
     };
-    el.play().catch(err => {
-      if (!err || err.name !== 'AbortError') statusEl.textContent = 'Tap again to allow audio';
+    // must wait for the URL: playing before there is a src fires onerror
+    audioUrlFor(SAMPLE).then(u => {
+      el.src = u;
+      return el.play();
+    }).catch(err => {
+      if (err && err.name === 'AbortError') return;
+      noteEl.hidden = false;
+      noteEl.textContent = 'Sample failed: ' + ((err && err.message) || err);
     });
     return;
   }
