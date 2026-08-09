@@ -43,8 +43,10 @@ jobs:
       - name: Build unsigned archive
         working-directory: ios/App
         run: |
+          # Capacitor 8 uses Swift Package Manager, not CocoaPods, so there is
+          # no .xcworkspace - build the project directly.
           xcodebuild \
-            -workspace App.xcworkspace \
+            -project App.xcodeproj \
             -scheme App \
             -configuration Release \
             -sdk iphoneos \
