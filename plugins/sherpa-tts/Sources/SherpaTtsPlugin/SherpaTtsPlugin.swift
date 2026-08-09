@@ -81,7 +81,9 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
             config.max_num_sentences = 1
             config.silence_scale = 0.2
 
-            tts = withUnsafePointer(to: &config) { OpaquePointer(SherpaOnnxCreateOfflineTts($0)) }
+            // SherpaOnnxOfflineTts is an opaque C struct, so Swift already
+            // hands this back as an OpaquePointer - no cast needed.
+            tts = withUnsafePointer(to: &config) { SherpaOnnxCreateOfflineTts($0) }
             if tts == nil { loadError = "sherpa-onnx refused to build the model" }
             return tts != nil
         }}}}}}
@@ -94,8 +96,8 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve([
                 "ready": ok,
                 "error": self.loadError ?? "",
-                "speakers": ok ? Int(SherpaOnnxOfflineTtsNumSpeakers(.init(self.tts!))) : 0,
-                "sampleRate": ok ? Int(SherpaOnnxOfflineTtsSampleRate(.init(self.tts!))) : 0,
+                "speakers": ok ? Int(SherpaOnnxOfflineTtsNumSpeakers(self.tts)) : 0,
+                "sampleRate": ok ? Int(SherpaOnnxOfflineTtsSampleRate(self.tts)) : 0,
                 "modelDir": self.modelDir.path
             ])
         }
@@ -137,7 +139,7 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
 
             let audio: UnsafePointer<SherpaOnnxGeneratedAudio>? = text.withCString { cText in
                 withUnsafePointer(to: &gen) { cGen in
-                    SherpaOnnxOfflineTtsGenerateWithConfig(.init(engine), cText, cGen, nil, nil)
+                    SherpaOnnxOfflineTtsGenerateWithConfig(engine, cText, cGen, nil, nil)
                 }
             }
             guard let audio = audio, audio.pointee.n > 0 else {
