@@ -39,15 +39,23 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
         if loadError != nil { return false }
 
         let dir = modelDir
-        let model = dir.appendingPathComponent("model.onnx").path
+        let fm = FileManager.default
+        let contents = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+
+        // The int8 archive ships model.int8.onnx, the float one model.onnx, so
+        // take whichever .onnx is actually present rather than assuming a name.
+        guard let onnx = contents.first(where: { $0.hasSuffix(".onnx") }) else {
+            loadError = "no .onnx in bundle. found: \(contents.prefix(12).joined(separator: ", "))"
+            return false
+        }
+        let model = dir.appendingPathComponent(onnx).path
         let voices = dir.appendingPathComponent("voices.bin").path
         let tokens = dir.appendingPathComponent("tokens.txt").path
         let dataDir = dir.appendingPathComponent("espeak-ng-data").path
         let lexicon = dir.appendingPathComponent("lexicon-us-en.txt").path
 
-        let fm = FileManager.default
-        for p in [model, voices, tokens] where !fm.fileExists(atPath: p) {
-            loadError = "missing \((p as NSString).lastPathComponent) in app bundle"
+        for p in [voices, tokens] where !fm.fileExists(atPath: p) {
+            loadError = "missing \((p as NSString).lastPathComponent). found: \(contents.prefix(12).joined(separator: ", "))"
             return false
         }
 

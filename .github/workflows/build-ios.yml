@@ -33,6 +33,8 @@ jobs:
           tar -xjf kokoro.tar.bz2 -C www/model --strip-components=1
           rm kokoro.tar.bz2
           du -sh www/model
+          echo "--- model files ---"
+          ls -la www/model
 
       - name: Add the iOS platform
         run: npx cap add ios
