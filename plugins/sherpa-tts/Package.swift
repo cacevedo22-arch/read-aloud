@@ -4,13 +4,16 @@ import PackageDescription
 // The binary target's name must match the .xcframework inside the zip, which is
 // "sherpa-onnx.xcframework". The Swift module it exposes is SherpaOnnxC, from
 // the modulemap in SherpaOnnxC.framework.
+// Capacitor derives these names from the npm package name ("sherpa-tts"), and
+// generates a dependency on product "SherpaTts" in package "SherpaTts". Both
+// must match exactly or dependency resolution fails.
 let package = Package(
-    name: "SherpaTtsPlugin",
+    name: "SherpaTts",
     platforms: [.iOS(.v14)],
     products: [
         .library(
-            name: "SherpaTtsPlugin",
-            targets: ["SherpaTtsPlugin"])
+            name: "SherpaTts",
+            targets: ["SherpaTts"])
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0")
@@ -22,7 +25,7 @@ let package = Package(
             checksum: "b48ec217952a5b82242ce7d8323fcbc8de54ff900a72df1f0b20bfcf7b08881d"
         ),
         .target(
-            name: "SherpaTtsPlugin",
+            name: "SherpaTts",
             dependencies: [
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
