@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import CryptoKit
 import SherpaOnnxC
 
 /// Speaks text on the device with Kokoro, via sherpa-onnx.
@@ -86,7 +87,7 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
             config.model = modelConfig
             config.rule_fsts = cEmpty
             config.rule_fars = cEmpty
-            config.max_num_sentences = 1
+            config.max_num_sentences = 100   // we already send paragraph blocks; don't re-chunk per sentence
             config.silence_scale = 0.2
 
             // SherpaOnnxOfflineTts is an opaque C struct, so Swift already
@@ -130,8 +131,10 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
 
             // Same text, voice and speed must map to the same file, so repeats
             // and re-reads are instant rather than re-synthesized.
-            let key = "\(sid)-\(speed)-\(text)".data(using: .utf8)!
-            let name = String(format: "%08x-%d", key.hashValue & 0x7fffffff, text.count)
+            // SHA256, not hashValue: Swift seeds hashValue per process, so the
+            // old key changed every launch and nothing was ever reused.
+            let key = Data("\(sid)-\(speed)-\(text)".utf8)
+            let name = SHA256.hash(data: key).map { String(format: "%02x", $0) }.joined()
             let out = self.cacheDir.appendingPathComponent("\(name).wav")
 
             if FileManager.default.fileExists(atPath: out.path) {
