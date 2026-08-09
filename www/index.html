@@ -188,6 +188,13 @@
       <select id="chap"></select>
     </div>
 
+    <div id="cookWrap" hidden>
+      <label class="f">Cook ahead</label>
+      <button id="cookCh" style="width:100%;margin-bottom:6px">Cook this chapter</button>
+      <button id="cookBook" style="width:100%">Cook whole book</button>
+      <div id="cookProg" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+    </div>
+
     <label class="f">Voice <span class="val" id="voiceCount"></span></label>
     <select id="voice"></select>
     <button id="test" style="width:100%; margin-top:6px">🔊 Test this voice</button>
@@ -327,6 +334,7 @@ async function loadPcVoices() {
       if (info.ready) {
         pcVoices = ['kokoro-am_michael', 'kokoro-af_heart'];
         loadVoices();
+        $('cookWrap').hidden = false;      // cooking only makes sense on-device
       }
     } catch (e) {
       diag('info() threw: ' + (e && e.message ? e.message : e));
@@ -863,18 +871,25 @@ function unlockAudio() {
   });
 }
 
-function buildBlocks() {
-  blocks = [];
+// Pure: cooking must produce byte-identical block text to playback, or the
+// cached audio won't be found when you press play.
+function makeBlocks(sents) {
+  const out = [];
   let buf = [], len = 0, start = 0;
-  const cap = () => BLOCK_RAMP[Math.min(blocks.length, BLOCK_RAMP.length - 1)];
-  sentences.forEach((s, i) => {
+  const cap = () => BLOCK_RAMP[Math.min(out.length, BLOCK_RAMP.length - 1)];
+  sents.forEach((s, i) => {
     if (len + s.length > cap() && buf.length) {
-      blocks.push({ text: buf.join(' '), from: start, to: i - 1 });
+      out.push({ text: buf.join(' '), from: start, to: i - 1 });
       buf = []; len = 0; start = i;
     }
     buf.push(s); len += s.length + 1;
   });
-  if (buf.length) blocks.push({ text: buf.join(' '), from: start, to: sentences.length - 1 });
+  if (buf.length) out.push({ text: buf.join(' '), from: start, to: sents.length - 1 });
+  return out;
+}
+
+function buildBlocks() {
+  blocks = makeBlocks(sentences);
   bidx = 0;
 }
 
@@ -1161,6 +1176,63 @@ $('rate').addEventListener('input', () => {
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+/* ---------- cooking: make the audio up front instead of while you listen ---------- */
+let cooking = false, cookCancel = false;
+
+function fmtMins(sec) {
+  if (!isFinite(sec) || sec <= 0) return '—';
+  const m = Math.round(sec / 60);
+  return m < 60 ? m + ' min' : (m / 60).toFixed(1) + ' hr';
+}
+
+async function cook(chapterIndexes, label) {
+  if (cooking) { cookCancel = true; return; }
+  cooking = true; cookCancel = false;
+  $('cookCh').textContent = 'Stop cooking';
+  $('cookBook').disabled = true;
+
+  // Every block of every chapter asked for, in order.
+  const jobs = [];
+  for (const ci of chapterIndexes) {
+    for (const b of makeBlocks(splitSentences(chapters[ci].text))) jobs.push(b.text);
+  }
+
+  const started = performance.now();
+  let done = 0, madeAudio = 0, spent = 0;
+  for (const text of jobs) {
+    if (cookCancel) break;
+    const t0 = performance.now();
+    try { await audioUrlFor(text); } catch (e) { /* keep going; one bad block isn't fatal */ }
+    const dt = (performance.now() - t0) / 1000;
+    done++;
+    if (dt > 0.05) { spent += dt; madeAudio += dt * (rtfSamples.length ? rtfSamples[rtfSamples.length - 1] : 1.3); }
+
+    const pct = Math.round(done / jobs.length * 100);
+    const rate = spent > 0 ? done / spent : 0;                  // blocks per second
+    const left = rate > 0 ? (jobs.length - done) / rate : NaN;
+    $('cookProg').textContent = `${label}: ${pct}% (${done}/${jobs.length}) · about ${fmtMins(left)} left`;
+  }
+
+  const mins = (performance.now() - started) / 60000;
+  $('cookProg').textContent = cookCancel
+    ? `Stopped at ${done}/${jobs.length}. Cooked parts are saved.`
+    : `${label} done — ${done} blocks in ${mins.toFixed(1)} min. Plays with no pauses now.`;
+  cooking = false;
+  $('cookCh').textContent = 'Cook this chapter';
+  $('cookBook').disabled = false;
+}
+
+$('cookCh').onclick = () => cook([cur], 'Chapter ' + (cur + 1));
+$('cookBook').onclick = () => {
+  if (cooking) { cookCancel = true; return; }
+  const hours = chapters.reduce((n, c) => n + c.text.split(/\s+/).length, 0) / 2.84 / 3600;
+  const rate = rtfSamples.length ? rtfSamples[rtfSamples.length - 1] : 1.3;
+  if (!confirm(`The whole book is about ${hours.toFixed(1)} hours of audio.\n\n` +
+               `At this phone's speed that's roughly ${fmtMins(hours * 3600 / rate)} of cooking, ` +
+               `and the phone will run hot the whole time.\n\nStart?`)) return;
+  cook(chapters.map((_, i) => i), 'Whole book');
+};
 
 loadPcVoices();
 loadLibrary();
