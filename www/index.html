@@ -199,6 +199,9 @@
     <input type="range" id="pitch" min="0" max="2" step="0.05" value="1">
 
     <div id="note" class="warn" hidden></div>
+    <div id="diag" hidden style="margin-top:10px;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;
+         color:#9aa2b1;background:#232733;border:1px solid #313747;border-radius:6px;padding:8px;
+         word-break:break-all"></div>
   </div>
 
   <div id="stage">
@@ -298,16 +301,35 @@ let pcVoices = [];
 function usingPC() { return String($('voice').value).startsWith('pc:'); }
 function pcVoice() { return String($('voice').value).replace(/^pc:/, ''); }
 
+function diag(msg) {
+  const el = $('diag');
+  if (!el) return;
+  el.hidden = false;
+  el.textContent = msg;
+}
+
 async function loadPcVoices() {
-  if (NATIVE) {
-    // the app carries the model itself, so offer the two voices it was built with
-    const info = await window.Capacitor.Plugins.SherpaTts.info().catch(() => null);
-    if (info && info.ready) {
-      pcVoices = ['kokoro-am_michael', 'kokoro-af_heart'];
-      loadVoices();
-    } else {
-      noteEl.hidden = false;
-      noteEl.textContent = 'On-device voice failed to load: ' + ((info && info.error) || 'unknown');
+  const cap = window.Capacitor;
+  if (cap) {
+    // Report what the bridge actually exposes. Previously a missing plugin threw
+    // past the .catch and vanished, leaving no voices and no explanation.
+    const names = cap.Plugins ? Object.keys(cap.Plugins).join(',') : '(no Plugins)';
+    const plugin = cap.Plugins && cap.Plugins.SherpaTts;
+    diag(`native=${NATIVE} plugins=[${names}]`);
+
+    if (!plugin) {
+      diag(`native=${NATIVE} · SherpaTts MISSING · plugins=[${names}]`);
+      return;
+    }
+    try {
+      const info = await plugin.info();
+      diag(`ready=${info.ready} speakers=${info.speakers} rate=${info.sampleRate} err=${info.error || 'none'} dir=${info.modelDir || '?'}`);
+      if (info.ready) {
+        pcVoices = ['kokoro-am_michael', 'kokoro-af_heart'];
+        loadVoices();
+      }
+    } catch (e) {
+      diag('info() threw: ' + (e && e.message ? e.message : e));
     }
     return;
   }
