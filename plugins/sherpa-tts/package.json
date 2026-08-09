@@ -1,0 +1,22 @@
+{
+  "name": "sherpa-tts",
+  "version": "1.0.0",
+  "description": "On-device Kokoro text-to-speech via sherpa-onnx",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "Package.swift",
+    "Sources"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  },
+  "license": "MIT"
+}

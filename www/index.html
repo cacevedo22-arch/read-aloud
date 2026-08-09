@@ -299,6 +299,18 @@ function usingPC() { return String($('voice').value).startsWith('pc:'); }
 function pcVoice() { return String($('voice').value).replace(/^pc:/, ''); }
 
 async function loadPcVoices() {
+  if (NATIVE) {
+    // the app carries the model itself, so offer the two voices it was built with
+    const info = await window.Capacitor.Plugins.SherpaTts.info().catch(() => null);
+    if (info && info.ready) {
+      pcVoices = ['kokoro-am_michael', 'kokoro-af_heart'];
+      loadVoices();
+    } else {
+      noteEl.hidden = false;
+      noteEl.textContent = 'On-device voice failed to load: ' + ((info && info.error) || 'unknown');
+    }
+    return;
+  }
   if (location.protocol === 'file:') return;
   try {
     const r = await fetch('/voices');
@@ -332,7 +344,7 @@ $('test').onclick = () => {
     unlockAudio();
     statusEl.textContent = 'Synthesizing sample…';
     const el = current();
-    el.src = sayUrl(SAMPLE);
+    audioUrlFor(SAMPLE).then(u => { el.src = u; el.play().catch(() => {}); });
     el.playbackRate = +$('rate').value;
     el.onended = () => { statusEl.textContent = 'Sample finished'; };
     el.onerror = () => {
@@ -848,6 +860,25 @@ function sayUrl(text) {
   return '/say?v=' + encodeURIComponent(pcVoice()) + '&r=1&t=' + encodeURIComponent(text);
 }
 
+/* In the packaged app there is no server: the phone synthesizes locally and
+   hands back a file path. Everything downstream still just gets a URL. */
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const KOKORO_SID = { am_michael: 16, af_heart: 3 };   // ids from the sherpa-onnx model
+const urlMemo = new Map();
+
+async function audioUrlFor(text) {
+  if (!NATIVE) return sayUrl(text);
+  const voice = pcVoice().replace(/^kokoro-/, '');
+  const memoKey = voice + '|' + text;
+  if (urlMemo.has(memoKey)) return urlMemo.get(memoKey);
+
+  const plugin = window.Capacitor.Plugins.SherpaTts;
+  const res = await plugin.synthesize({ text, sid: KOKORO_SID[voice] ?? 16, speed: 1.0 });
+  const url = window.Capacitor.convertFileSrc(res.path);
+  urlMemo.set(memoKey, url);
+  return url;
+}
+
 /* Render the chapter ahead of playback, strictly one block at a time and in
    reading order, so the server's synthesis lock is never contended. The player
    does NOT issue its own request - it waits on renderP[n] and then plays from
@@ -863,9 +894,13 @@ function warmChapter(token, startAt) {
     const n = i;
     chain = chain.then(async () => {
       if (token !== warmToken) throw new Error('abandoned');
-      const res = await fetch(sayUrl(blocks[n].text), { signal: ctl.signal });
-      if (!res.ok) throw new Error('render failed ' + res.status);
-      await res.arrayBuffer();               // ensure it's fully written before we claim it
+      if (NATIVE) {
+        await audioUrlFor(blocks[n].text);   // synthesizes on the phone and caches it
+      } else {
+        const res = await fetch(sayUrl(blocks[n].text), { signal: ctl.signal });
+        if (!res.ok) throw new Error('render failed ' + res.status);
+        await res.arrayBuffer();             // ensure it's written before we claim it
+      }
       warmed = n + 1;
       if (playing) showProgress();
     });
@@ -892,10 +927,10 @@ function speakCurrent() {
   const waitFor = (warmed > myBlock) ? Promise.resolve() : (renderP[myBlock] || Promise.resolve());
   if (warmed <= myBlock) statusEl.textContent = 'Rendering…';
 
-  waitFor.then(() => {
+  waitFor.then(() => audioUrlFor(b.text)).then(url => {
     if (!playing || myToken !== warmToken || myBlock !== bidx) return;   // skipped away
     const el = current();
-    el.src = sayUrl(b.text);
+    el.src = url;
     el.playbackRate = +$('rate').value;
     el.onended = () => {
       if (!playing) return;
@@ -921,10 +956,10 @@ function speakCurrent() {
     const nxt = blocks[myBlock + 1];
     if (nxt) {
       const ready = (warmed > myBlock + 1) ? Promise.resolve() : (renderP[myBlock + 1] || Promise.resolve());
-      ready.then(() => {
+      ready.then(() => audioUrlFor(nxt.text)).then(nextUrl => {
         if (myToken !== warmToken || myBlock !== bidx) return;
         const other = players[1 - pi];
-        other.src = sayUrl(nxt.text);
+        other.src = nextUrl;
         other.load();
       }).catch(() => {});
     }
