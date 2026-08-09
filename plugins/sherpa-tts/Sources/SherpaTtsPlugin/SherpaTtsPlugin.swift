@@ -27,10 +27,18 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
         Bundle.main.resourceURL!.appendingPathComponent("public/model")
     }
 
+    /// Application Support, not Caches: iOS purges Caches whenever the device
+    /// runs low on space, which would silently throw away a cooked book.
     private var cacheDir: URL {
-        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let fm = FileManager.default
+        var d = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("tts", isDirectory: true)
-        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: d, withIntermediateDirectories: true)
+
+        // Also tell iCloud/iTunes not to back up hours of regenerable audio.
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? d.setResourceValues(values)
         return d
     }
 
