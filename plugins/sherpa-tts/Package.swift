@@ -19,10 +19,12 @@ let package = Package(
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0")
     ],
     targets: [
+        // The plain "ios-static" build omits onnxruntime and fails to link with
+        // undefined _OrtGetApiBase. This variant has onnxruntime baked in.
         .binaryTarget(
             name: "sherpa-onnx",
-            url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/xcframework/sherpa-onnx-v1.13.4-ios-static.xcframework.zip",
-            checksum: "b48ec217952a5b82242ce7d8323fcbc8de54ff900a72df1f0b20bfcf7b08881d"
+            url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/xcframework/sherpa-onnx-v1.13.4-ios-shared-onnxruntime-static.xcframework.zip",
+            checksum: "889dccd77d3572aebc0b53569b7d9b324314f548d4172eed7759f2b35671d10a"
         ),
         .target(
             name: "SherpaTts",
