@@ -2,6 +2,7 @@
   "appId": "com.christian.readaloud",
   "appName": "Read Aloud",
   "webDir": "www",
+  "packageClassList": ["SherpaTtsPlugin"],
   "ios": {
     "contentInset": "always",
     "backgroundColor": "#14161a"
