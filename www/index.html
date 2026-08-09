@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Read Aloud</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14161a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Read Aloud">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f26;
+    --panel-2: #232733;
+    --line: #313747;
+    --text: #e7e9ee;
+    --muted: #9aa2b1;
+    --accent: #6ea8fe;
+    --accent-soft: rgba(110,168,254,.16);
+    --hi: #ffd479;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  .sub { color: var(--muted); font-size: 13px; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  #side {
+    width: 300px;
+    flex: 0 0 300px;
+    border-right: 1px solid var(--line);
+    padding: 16px;
+    overflow-y: auto;
+    background: var(--panel);
+  }
+  #stage { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  #drop {
+    border: 2px dashed var(--line);
+    border-radius: 10px;
+    padding: 22px 14px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: .15s;
+    font-size: 14px;
+  }
+  #drop:hover, #drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  #drop b { color: var(--text); display: block; margin-bottom: 4px; font-size: 15px; }
+  #file { display: none; }
+
+  .book {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 6px;
+    padding: 9px 11px;
+    line-height: 1.35;
+  }
+  .book small { color: var(--muted); display: block; font-size: 11px; }
+
+  label.f { display: block; margin: 16px 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  select, input[type=range], textarea {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 9px;
+    font: inherit;
+  }
+  input[type=range] { padding: 0; accent-color: var(--accent); }
+  .val { float: right; color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: 0; }
+
+  #controls {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line);
+    align-items: center;
+    flex-wrap: wrap;
+    background: var(--panel);
+  }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 15px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .38; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
+  #status { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  #text {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 32px 60vh;
+    font-size: 18px;
+    line-height: 1.85;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  #text:empty::before {
+    content: "Drop a file on the left, or paste text here and press Play.";
+    color: var(--muted);
+    font-size: 15px;
+  }
+  #text[contenteditable]:focus { outline: none; }
+  .s { border-radius: 3px; padding: 1px 0; }
+  .s:hover { background: rgba(255,255,255,.07); cursor: pointer; }
+  .s.on { background: var(--hi); color: #191919; }
+  .s.done { color: var(--muted); }
+  .warn { color: #ffb3b3; font-size: 13px; margin-top: 10px; }
+
+  #menu { display: none; }
+
+  /* Phones: stack it. At 394px the old fixed 300px sidebar left the text 90px wide. */
+  @media (max-width: 820px) {
+    header { padding: 10px 14px; }
+    .sub { display: none; }
+    #menu { display: inline-block; margin-left: auto; }
+    main { flex-direction: column; }
+    #side {
+      width: 100%;
+      flex: 0 0 auto;
+      max-height: 46vh;
+      border-right: none;
+      border-bottom: 1px solid var(--line);
+    }
+    body.hide-side #side { display: none; }
+    #stage { flex: 1; min-height: 0; }
+    #controls { padding: 10px 14px; gap: 6px; }
+    #controls button { padding: 10px 13px; }
+    #status { width: 100%; margin-left: 0; order: 9; }
+    #text { padding: 18px 18px 55vh; font-size: 19px; }
+    .book { padding: 12px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Read Aloud</h1>
+  <span class="sub">Local · offline for text files · click any sentence to jump there</span>
+  <button id="menu">☰ Books</button>
+</header>
+
+<main>
+  <div id="side">
+    <div id="libWrap" hidden>
+      <label class="f" style="margin-top:0">On this PC</label>
+      <div id="lib"></div>
+    </div>
+
+    <div id="drop">
+      <b>Choose a file</b>
+      or drag one here<br>
+      <span style="font-size:12px">.epub .pdf .docx · .txt .md .csv .json .html</span>
+    </div>
+    <input type="file" id="file" accept=".txt,.md,.markdown,.csv,.json,.log,.html,.htm,.pdf,.docx,.epub,.zip,text/*">
+
+    <div id="chapWrap" hidden>
+      <label class="f">Chapter</label>
+      <select id="chap"></select>
+    </div>
+
+    <label class="f">Voice <span class="val" id="voiceCount"></span></label>
+    <select id="voice"></select>
+    <button id="test" style="width:100%; margin-top:6px">🔊 Test this voice</button>
+
+    <label class="f">Speed <span class="val" id="rateV">1.00×</span></label>
+    <input type="range" id="rate" min="0.5" max="2.5" step="0.05" value="1">
+
+    <label class="f">Pitch <span class="val" id="pitchV">1.00</span></label>
+    <input type="range" id="pitch" min="0" max="2" step="0.05" value="1">
+
+    <div id="note" class="warn" hidden></div>
+  </div>
+
+  <div id="stage">
+    <div id="controls">
+      <button id="play" class="primary">▶ Play</button>
+      <span id="status">No file loaded</span>
+    </div>
+    <div id="text" contenteditable="true" spellcheck="false"></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const synth = window.speechSynthesis;
+const textEl = $('text'), statusEl = $('status'), noteEl = $('note');
+
+let sentences = [];   // array of strings
+let spans = [];       // matching <span> nodes
+let idx = 0;
+let playing = false;
+let loading = false;   // a file is being fetched/parsed — Play must wait for it
+let editable = true;  // true while the div holds raw pasted/typed text
+
+if (!synth) {
+  noteEl.hidden = false;
+  noteEl.textContent = 'This browser has no speech engine. Use Chrome, Edge or Firefox.';
+}
+
+/* ---------- voices ---------- */
+let voices = [];
+function loadVoices() {
+  const mine = navigator.language.slice(0, 2).toLowerCase();
+  // Sort so this device's language comes first, offline voices ahead of network
+  // ones. Indices below are into THIS array, which is what speakCurrent uses.
+  voices = synth.getVoices().slice().sort((a, b) => {
+    const la = a.lang.toLowerCase().startsWith(mine) ? 0 : 1;
+    const lb = b.lang.toLowerCase().startsWith(mine) ? 0 : 1;
+    if (la !== lb) return la - lb;
+    if (a.localService !== b.localService) return a.localService ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const sel = $('voice');
+  sel.innerHTML = '';
+
+  // PC voices first — they're the good ones, and they sound identical on every
+  // device because this machine does the speaking.
+  if (pcVoices.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'From your PC (best)';
+    pcVoices.forEach(name => {
+      const o = document.createElement('option');
+      o.value = 'pc:' + name;
+      o.textContent = prettyVoice(name);
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  }
+
+  const g2 = document.createElement('optgroup');
+  g2.label = pcVoices.length ? 'From this browser' : 'Voices';
+  voices.forEach(v => {
+    const o = document.createElement('option');
+    o.value = 'br:' + v.name;      // by name, not index: installing a voice renumbers the list
+    o.textContent = v.name + ' — ' + v.lang + (v.localService ? '' : ' · online');
+    g2.appendChild(o);
+  });
+  sel.appendChild(g2);
+
+  // Remember by NAME, not index: installing new voices renumbers the whole list,
+  // so a saved index would silently point at a different voice afterwards.
+  const saved = localStorage.getItem('ra.voiceName');
+  if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+  else if (pcVoices.length) sel.value = 'pc:' +
+    (pcVoices.find(n => n === 'kokoro-am_michael') || pcVoices[0]);   // the one he picked
+  else if (voices.length) sel.value = 'br:' + voices[0].name;
+
+  $('voiceCount').textContent = pcVoices.length
+    ? `${pcVoices.length} from PC, ${voices.length} in browser`
+    : voices.length + ' found';
+}
+
+// "kokoro-am_michael" -> "Michael — US male · Kokoro"
+const ACCENT = { a: 'US', b: 'UK', e: 'ES', f: 'FR', h: 'HI', i: 'IT', j: 'JP', p: 'BR', z: 'CN' };
+function prettyVoice(name) {
+  if (name.startsWith('kokoro-')) {
+    const id = name.slice(7);
+    const m = id.match(/^([abefhijpz])([fm])_(.+)$/);
+    const who = (m ? m[3] : id).replace(/^./, c => c.toUpperCase());
+    if (!m) return who + ' · Kokoro';
+    return `${who} — ${ACCENT[m[1]] || ''} ${m[2] === 'f' ? 'female' : 'male'} · Kokoro`;
+  }
+  return name.replace(/^en_[A-Z]{2}-/, '').replace(/-/g, ' ').replace(/^./, c => c.toUpperCase()) + ' · Piper';
+}
+
+let pcVoices = [];
+function usingPC() { return String($('voice').value).startsWith('pc:'); }
+function pcVoice() { return String($('voice').value).replace(/^pc:/, ''); }
+
+async function loadPcVoices() {
+  if (location.protocol === 'file:') return;
+  try {
+    const r = await fetch('/voices');
+    if (!r.ok) return;
+    const j = await r.json();
+    // Kokoro ships 54 voices across 9 languages; keep the English ones (a=US, b=UK)
+    // so the dropdown isn't 40 entries of Mandarin and Japanese.
+    pcVoices = (j.voices || []).filter(n => !n.startsWith('kokoro-') || /^kokoro-[ab][fm]_/.test(n));
+    if (pcVoices.length) loadVoices();
+  } catch (e) { /* plain static server, browser voices only */ }
+}
+
+// iOS Safari often returns an empty list on the first call and does not always
+// fire onvoiceschanged, so poll briefly instead of trusting either one.
+if (synth) {
+  loadVoices();
+  synth.onvoiceschanged = loadVoices;
+  let tries = 0;
+  const poll = setInterval(() => {
+    if (voices.length || ++tries > 20) clearInterval(poll); else loadVoices();
+  }, 250);
+}
+
+const SAMPLE = 'This is how I sound. The city of Elantris loomed over the smaller city of Kae.';
+
+$('test').onclick = () => {
+  if (playing) stop();   // otherwise cancel() silently strands the book mid-read
+  silence();
+
+  if (usingPC()) {
+    unlockAudio();
+    statusEl.textContent = 'Synthesizing sample…';
+    const el = current();
+    el.src = sayUrl(SAMPLE);
+    el.playbackRate = +$('rate').value;
+    el.onended = () => { statusEl.textContent = 'Sample finished'; };
+    el.onerror = () => {
+      noteEl.hidden = false;
+      noteEl.textContent = 'No answer from the PC voice server — is Start Server.cmd running?';
+    };
+    el.play().catch(err => {
+      if (!err || err.name !== 'AbortError') statusEl.textContent = 'Tap again to allow audio';
+    });
+    return;
+  }
+
+  const u = new SpeechSynthesisUtterance(SAMPLE);
+  const v = voices.find(x => 'br:' + x.name === $('voice').value);
+  if (v) { u.voice = v; u.lang = v.lang; }
+  u.rate = +$('rate').value;
+  u.pitch = +$('pitch').value;
+  synth.speak(u);
+};
+$('voice').onchange = e => {
+  localStorage.setItem('ra.voiceName', e.target.value);
+  // the cache is per voice, so the rendered-ahead audio is worthless now
+  warmToken++;
+  warmed = 0;
+  if (usingPC() && blocks.length) warmChapter(warmToken, bidx);
+  if (playing) restartHere();
+};
+
+/* ---------- sliders ---------- */
+function slider(id, out, fmt) {
+  const el = $(id);
+  const saved = localStorage.getItem('ra.' + id);
+  if (saved) el.value = saved;
+  const show = () => $(out).textContent = fmt(+el.value);
+  el.oninput = () => { show(); localStorage.setItem('ra.' + id, el.value); };
+  // PC voices retune live via playbackRate, so don't re-speak the sentence
+  el.onchange = () => { if (playing && !usingPC()) restartHere(); };
+  show();
+}
+slider('rate', 'rateV', v => v.toFixed(2) + '×');
+slider('pitch', 'pitchV', v => v.toFixed(2));
+
+/* ---------- loading files ---------- */
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => { if (e.target.files[0]) openFile(e.target.files[0]); };
+['dragenter','dragover'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+['dragleave','drop'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
+$('drop').addEventListener('drop', e => { if (e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]); });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  if (e.target.closest('#text')) return;
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
+});
+
+/* ---------- library: whatever sits in the served books/ folder ---------- */
+const READABLE = /\.(epub|zip|pdf|docx|txt|md|markdown|csv|json|log|html|htm)$/i;
+
+async function loadLibrary() {
+  if (location.protocol === 'file:') return;   // no directory listing without the server
+  let names = [];
+  try {
+    const res = await fetch('books/');
+    if (!res.ok) return;
+    // python's http.server returns an HTML index; pull the filenames out of it
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    names = [...doc.querySelectorAll('a[href]')]
+      .map(a => decodeURIComponent(a.getAttribute('href')))
+      .filter(h => !h.startsWith('/') && !h.startsWith('..') && READABLE.test(h));
+  } catch (e) { return; }
+  if (!names.length) return;
+
+  const lib = $('lib');
+  lib.innerHTML = '';
+  names.forEach(n => {
+    const b = document.createElement('button');
+    b.className = 'book';
+    b.innerHTML = '';
+    b.appendChild(document.createTextNode(n.replace(READABLE, '')));
+    const s = document.createElement('small');
+    s.textContent = n.split('.').pop().toUpperCase() + ' · on the PC';
+    b.appendChild(s);
+    b.onclick = () => openUrl('books/' + encodeURIComponent(n), n);
+    lib.appendChild(b);
+  });
+  $('libWrap').hidden = false;
+
+  // one book in the folder: just start it
+  if (names.length === 1) openUrl('books/' + encodeURIComponent(names[0]), names[0]);
+}
+
+async function openUrl(url, name) {
+  setLoading(true, 'Downloading ' + name + '…');
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+
+    // stream it so a 15 MB book over Wi-Fi shows real progress
+    const total = +res.headers.get('content-length') || 0;
+    let got = 0;
+    const chunks = [];
+    const reader = res.body?.getReader();
+    if (reader) {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); got += value.length;
+        setLoading(true, total
+          ? `Downloading ${name} — ${Math.round(got / total * 100)}%`
+          : `Downloading ${name} — ${(got / 1048576).toFixed(1)} MB`);
+      }
+    }
+    const blob = reader ? new Blob(chunks) : await res.blob();
+    await openFile(new File([blob], name));
+  } catch (err) {
+    setLoading(false);
+    statusEl.textContent = 'Could not fetch that file';
+    noteEl.hidden = false;
+    noteEl.textContent = err.message;
+  }
+}
+
+function injectScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('could not load ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+// Prefer the copies sitting in lib/ next to this page, so the phone never needs
+// the internet. Fall back to the CDN only if they aren't there.
+async function loadScript(file, cdn) {
+  try { await injectScript('lib/' + file); }
+  catch (e) { await injectScript(cdn); }
+}
+
+// same choice, but for a URL we hand to something else (the pdf.js worker)
+async function pick(file, cdn) {
+  try { if ((await fetch('lib/' + file, { method: 'HEAD' })).ok) return 'lib/' + file; } catch (e) {}
+  return cdn;
+}
+
+async function openFile(f) {
+  stop();
+  noteEl.hidden = true;
+  chapters = [];
+  chapterStart = [];
+  spans = [];
+  textEl.textContent = '';
+  $('chapWrap').hidden = true;
+  setLoading(true, 'Opening ' + f.name + '…');
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  try {
+    let raw;
+    if (ext === 'pdf') {
+      if (!window.pdfjsLib) {
+        await loadScript('pdf.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = await pick('pdf.worker.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js');
+      }
+      const doc = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
+      const out = [];
+      for (let p = 1; p <= doc.numPages; p++) {
+        statusEl.textContent = `Reading page ${p}/${doc.numPages}…`;
+        const tc = await (await doc.getPage(p)).getTextContent();
+        out.push(tc.items.map(i => i.str + (i.hasEOL ? '\n' : '')).join(''));
+      }
+      raw = out.join('\n\n');
+    } else if (ext === 'docx') {
+      if (!window.mammoth) await loadScript('mammoth.browser.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+      raw = (await mammoth.extractRawText({ arrayBuffer: await f.arrayBuffer() })).value;
+    } else if (ext === 'epub' || ext === 'zip') {
+      raw = await readEpub(f);
+    } else if (ext === 'html' || ext === 'htm') {
+      raw = domToText(new DOMParser().parseFromString(await f.text(), 'text/html').body);
+    } else {
+      raw = await f.text();
+    }
+    raw = raw.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (!raw) throw new Error('No readable text in that file (a scanned PDF is images, not text).');
+    await setText(raw, f.name);
+  } catch (err) {
+    setLoading(false);
+    statusEl.textContent = 'Could not read that file';
+    noteEl.hidden = false;
+    noteEl.textContent = err.message;
+  }
+}
+
+/* ---------- epub ---------- */
+// Turn a parsed (non-rendered) DOM tree into readable text. innerText needs a
+// live layout, which a DOMParser document doesn't have, so walk it by hand.
+const BLOCK = /^(P|DIV|H1|H2|H3|H4|H5|H6|LI|TR|BLOCKQUOTE|SECTION|ARTICLE|HR|PRE|TD|FIGCAPTION)$/;
+function domToText(root) {
+  if (!root) return '';
+  let out = '';
+  (function walk(n) {
+    for (const c of n.childNodes) {
+      if (c.nodeType === 3) out += c.nodeValue.replace(/\s+/g, ' ');
+      else if (c.nodeType === 1) {
+        const t = c.tagName.toUpperCase();
+        if (t === 'SCRIPT' || t === 'STYLE' || t === 'HEAD') continue;
+        if (t === 'BR') { out += '\n'; continue; }
+        const block = BLOCK.test(t);
+        if (block && out && !out.endsWith('\n')) out += '\n';
+        walk(c);
+        if (block) out += '\n';
+      }
+    }
+  })(root);
+  return out.replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// resolve an href relative to the directory of a zip entry
+function resolvePath(base, href) {
+  href = decodeURIComponent(href.split('#')[0]);
+  const parts = base.split('/').slice(0, -1).concat(href.split('/'));
+  const stack = [];
+  for (const p of parts) {
+    if (p === '.' || p === '') continue;
+    if (p === '..') stack.pop(); else stack.push(p);
+  }
+  return stack.join('/');
+}
+
+let chapters = [];   // {title, text}
+
+async function readEpub(f) {
+  if (!window.JSZip) await loadScript('jszip.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  const zip = await JSZip.loadAsync(f);
+
+  const containerFile = zip.file('META-INF/container.xml');
+  if (!containerFile) throw new Error('That zip is not an EPUB (no META-INF/container.xml).');
+  const xml = s => new DOMParser().parseFromString(s, 'application/xml');
+
+  const container = xml(await containerFile.async('string'));
+  const opfPath = container.querySelector('rootfile').getAttribute('full-path');
+  const opf = xml(await zip.file(opfPath).async('string'));
+
+  // manifest: id -> {href, type}
+  const manifest = {};
+  opf.querySelectorAll('manifest > item').forEach(it => {
+    manifest[it.getAttribute('id')] = {
+      href: resolvePath(opfPath, it.getAttribute('href')),
+      type: it.getAttribute('media-type') || ''
+    };
+  });
+
+  // spine gives true reading order
+  const spine = [...opf.querySelectorAll('spine > itemref')]
+    .map(r => manifest[r.getAttribute('idref')])
+    .filter(m => m && /xhtml|html/.test(m.type));
+  if (!spine.length) throw new Error('EPUB has no readable chapters in its spine.');
+
+  // Titles, keyed by file path. Read the NCX *and* the nav doc: in Elantris the
+  // nav lists only the 19 parts while the NCX nests every chapter under them.
+  const titles = {};
+  for (const item of Object.values(manifest)) {
+    const isNcx = item.type === 'application/x-dtbncx+xml';
+    const isNav = /nav\.xhtml$/.test(item.href);
+    if (!isNcx && !isNav) continue;
+    try {
+      const doc = xml(await zip.file(item.href).async('string'));
+      doc.querySelectorAll('navPoint').forEach(np => {
+        const src = (np.querySelector('content') || {}).getAttribute?.('src');
+        const label = (np.querySelector('navLabel text') || {}).textContent;
+        if (src && label) titles[resolvePath(item.href, src)] = label.trim();
+      });
+      doc.querySelectorAll('nav a[href]').forEach(a => {
+        const label = a.textContent.trim();
+        if (label) titles[resolvePath(item.href, a.getAttribute('href'))] = label;
+      });
+    } catch (e) { /* titles are a nicety, not required */ }
+  }
+
+  chapters = [];
+  const parts = [];
+  for (let i = 0; i < spine.length; i++) {
+    statusEl.textContent = `Reading chapter ${i + 1}/${spine.length}…`;
+    const entry = zip.file(spine[i].href);
+    if (!entry) continue;
+    const doc = xml(await entry.async('string'));
+    const text = domToText(doc.documentElement ? (doc.querySelector('body') || doc.documentElement) : null);
+    if (text.replace(/\s/g, '').length < 20) continue;   // skip covers, blank pages
+    // No <h1> in this book — chapter headings are styled divs — so fall back to
+    // the first short line of the extracted text ("CHAPTER 1").
+    const firstLine = text.split('\n').find(l => l.trim()) || '';
+    const heading = titles[spine[i].href] ||
+      (doc.querySelector('h1,h2,h3') || {}).textContent?.trim() ||
+      (firstLine.length <= 60 ? firstLine.trim() : firstLine.trim().slice(0, 50) + '…') ||
+      'Section ' + (i + 1);
+    chapters.push({ title: heading.replace(/\s+/g, ' ').slice(0, 70), text });
+    parts.push(text);
+  }
+  if (!chapters.length) throw new Error('No text found — that EPUB may be images only, or DRM-protected.');
+
+  const title = (opf.querySelector('metadata title') || {}).textContent;
+  if (title) document.title = title.trim() + ' — Read Aloud';
+  return parts.join('\n\n');
+}
+
+function buildChapterList() {
+  const wrap = $('chapWrap'), sel = $('chap');
+  if (chapters.length < 2) { wrap.hidden = true; return; }
+  sel.innerHTML = '';
+  chapters.forEach((c, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = (i + 1) + '. ' + c.title;
+    sel.appendChild(o);
+  });
+  wrap.hidden = false;
+  sel.onchange = () => loadChapter(+sel.value, playing);
+}
+
+// Only ever one chapter is in the DOM. The whole book was 19,421 spans at once,
+// which a phone should not be asked to lay out.
+let cur = 0;
+function loadChapter(i, autoplay) {
+  if (i < 0 || i >= chapters.length) return;
+  silence();                       // stop the old chapter's audio, not just speech
+  cur = i;
+  $('chap').value = i;
+  renderText(chapters[i].text);
+  idx = 0;
+  bidx = 0;
+  textEl.scrollTop = 0;
+
+  if (usingPC()) {
+    buildBlocks();
+    warmToken++;                   // abandon the previous chapter's render queue
+    warmChapter(warmToken, 0);     // render this whole chapter ahead of playback
+  }
+  if (autoplay) { playing = true; speakCurrent(); }
+  else { showProgress(); setButtons(); }
+}
+
+function showProgress() {
+  const ch = chapters.length > 1 ? `Ch ${cur + 1}/${chapters.length} · ` : '';
+  const where = sentences.length ? ` · sentence ${idx + 1}/${sentences.length}` : '';
+  // how far the background render has run ahead of where you're listening
+  const ready = (usingPC() && blocks.length && warmed < blocks.length)
+    ? ` · rendered ${warmed}/${blocks.length}` : '';
+  statusEl.textContent = `${ch}${bookLabel}${where}${ready}`;
+}
+
+let bookLabel = '';
+
+async function setText(raw, name) {
+  const words = raw.split(/\s+/).filter(Boolean).length;
+  bookLabel = `${words.toLocaleString()} words`;
+
+  // unify: plain files are just a one-chapter book
+  if (!chapters.length) chapters = [{ title: name || 'Text', text: raw }];
+
+  setLoading(true, 'Preparing ' + words.toLocaleString() + ' words…');
+  await new Promise(r => setTimeout(r, 50));   // let the phone paint that first
+  buildChapterList();
+  loadChapter(0, false);
+  setLoading(false);
+  showProgress();
+  if (window.matchMedia('(max-width: 820px)').matches) document.body.classList.add('hide-side');
+}
+
+/* ---------- sentence splitting + rendering ---------- */
+function splitSentences(t) {
+  const out = [];
+  // break on blank lines first so headings/lists stay separate
+  for (const block of t.split(/\n\s*\n/)) {
+    for (const line of block.split('\n')) {
+      // trailing quotes must stay with their sentence — curly ones included, or
+      // every line of dialogue splits into `…afraid.` + `” Dilaf asked.`
+      const chunks = line.match(/[^.!?…]+[.!?…]+["'”’»)\]]*\s*|[^.!?…]+$/g) || [];
+      for (let c of chunks) {
+        c = c.trim();
+        if (!c) continue;
+        // keep utterances short — long ones get truncated by some engines
+        if (c.length > 300) {
+          let buf = '';
+          for (const part of c.split(/(?<=[,;:])\s+/)) {
+            if ((buf + ' ' + part).length > 300 && buf) { out.push(buf.trim()); buf = part; }
+            else buf += ' ' + part;
+          }
+          if (buf.trim()) out.push(buf.trim());
+        } else out.push(c);
+      }
+    }
+  }
+  return out.filter(s => /[a-z0-9]/i.test(s));
+}
+
+function render() { renderText(textEl.innerText); }
+
+function renderText(source) {
+  const raw = source.replace(/\r\n/g, '\n');
+  sentences = splitSentences(raw);
+  textEl.textContent = '';
+  spans = [];
+  // rebuild the text with each sentence wrapped, preserving what fell between them
+  let cursor = 0;
+  sentences.forEach((s, i) => {
+    const at = raw.indexOf(s, cursor);
+    if (at > cursor) textEl.appendChild(document.createTextNode(raw.slice(cursor, at)));
+    const sp = document.createElement('span');
+    sp.className = 's';
+    sp.textContent = s;
+    sp.onclick = () => {
+      idx = i;
+      if (usingPC() && blocks.length) bidx = blockAt(i);
+      if (playing) restartHere(); else play();
+    };
+    textEl.appendChild(sp);
+    spans.push(sp);
+    cursor = at + s.length;
+  });
+  if (cursor < raw.length) textEl.appendChild(document.createTextNode(raw.slice(cursor)));
+  textEl.setAttribute('contenteditable', 'false');
+  editable = false;
+}
+
+// A block covers several sentences; light the whole thing while it plays.
+function highlightRange(from, to) {
+  spans.forEach((sp, j) => {
+    sp.classList.toggle('on', j >= from && j <= to);
+    sp.classList.toggle('done', j < from);
+  });
+  const sp = spans[from];
+  if (!sp) return;
+  const r = sp.getBoundingClientRect(), box = textEl.getBoundingClientRect();
+  if (r.top < box.top + 60 || r.bottom > box.bottom - 120) {
+    sp.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+
+function highlight(i) {
+  spans.forEach((sp, j) => {
+    sp.classList.toggle('on', j === i);
+    sp.classList.toggle('done', j < i);
+  });
+  const sp = spans[i];
+  if (!sp) return;
+  const r = sp.getBoundingClientRect(), box = textEl.getBoundingClientRect();
+  if (r.top < box.top + 60 || r.bottom > box.bottom - 120) {
+    sp.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+
+/* ---------- playback ---------- */
+let keepAlive = null;
+
+/* Blocks, not sentences.
+   Synthesizing one sentence at a time meant a pause before every single one.
+   Instead: group sentences into paragraph-sized blocks, render the whole chapter
+   in the background while you listen, and keep two audio elements so the next
+   block is fully loaded before the current one ends. */
+
+/* Block sizes ramp up. The first block must be SMALL so audio starts quickly
+   after a skip (140 chars ~ 3s to synthesize); later blocks are large so the
+   seams between them are rare. Measured: ~11s to synthesize a 420-char block. */
+const BLOCK_RAMP = [100, 180, 280, 360, 420];
+let blocks = [];                // {text, from, to} - from/to index into sentences
+let bidx = 0;                   // which block is playing
+let warmToken = 0;              // bumped on chapter change to abandon old renders
+let warmed = 0;                 // blocks rendered so far in this chapter
+let renderP = [];               // index -> promise that resolves once it's cached
+let warmAbort = null;
+
+// Two elements, alternated. iOS grants playback per element on a user gesture,
+// so both get unlocked on the first tap of Play.
+const players = [new Audio(), new Audio()];
+let pi = 0;
+players.forEach(p => {
+  p.preload = 'auto';
+  p.addEventListener('waiting', () => { if (playing && p === players[pi]) statusEl.textContent = 'Synthesizing…'; });
+  p.addEventListener('playing', () => { if (playing && p === players[pi]) showProgress(); setButtons(); });
+  // the label has to follow what the audio is actually doing, not what we just asked for
+  p.addEventListener('play', setButtons);
+  p.addEventListener('pause', setButtons);
+});
+const audio = players[0];       // what pause()/isPaused() ask about
+function current() { return players[pi]; }
+
+function unlockAudio() {
+  players.forEach(p => {
+    if (!p.src) p.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+    p.play().then(() => p.pause()).catch(() => {});
+  });
+}
+
+function buildBlocks() {
+  blocks = [];
+  let buf = [], len = 0, start = 0;
+  const cap = () => BLOCK_RAMP[Math.min(blocks.length, BLOCK_RAMP.length - 1)];
+  sentences.forEach((s, i) => {
+    if (len + s.length > cap() && buf.length) {
+      blocks.push({ text: buf.join(' '), from: start, to: i - 1 });
+      buf = []; len = 0; start = i;
+    }
+    buf.push(s); len += s.length + 1;
+  });
+  if (buf.length) blocks.push({ text: buf.join(' '), from: start, to: sentences.length - 1 });
+  bidx = 0;
+}
+
+function blockAt(sentenceIndex) {
+  const at = blocks.findIndex(b => sentenceIndex >= b.from && sentenceIndex <= b.to);
+  return at < 0 ? 0 : at;
+}
+
+function sayUrl(text) {
+  // rate is applied with playbackRate, not baked in, so the server cache still
+  // hits when the speed slider moves
+  return '/say?v=' + encodeURIComponent(pcVoice()) + '&r=1&t=' + encodeURIComponent(text);
+}
+
+/* Render the chapter ahead of playback, strictly one block at a time and in
+   reading order, so the server's synthesis lock is never contended. The player
+   does NOT issue its own request - it waits on renderP[n] and then plays from
+   cache (141ms). Two competing requests were what produced the 43s stall. */
+function warmChapter(token, startAt) {
+  warmed = startAt;
+  renderP = [];
+  if (warmAbort) warmAbort.abort();          // drop the old chapter's queued work
+  const ctl = warmAbort = new AbortController();
+
+  let chain = Promise.resolve();
+  for (let i = startAt; i < blocks.length; i++) {
+    const n = i;
+    chain = chain.then(async () => {
+      if (token !== warmToken) throw new Error('abandoned');
+      const res = await fetch(sayUrl(blocks[n].text), { signal: ctl.signal });
+      if (!res.ok) throw new Error('render failed ' + res.status);
+      await res.arrayBuffer();               // ensure it's fully written before we claim it
+      warmed = n + 1;
+      if (playing) showProgress();
+    });
+    chain.catch(() => {});                   // an abandoned chain must not throw unhandled
+    renderP[n] = chain;
+  }
+}
+
+function speakCurrent() {
+  if (!usingPC()) return speakBrowser();
+
+  if (bidx >= blocks.length) {
+    if (cur + 1 < chapters.length) { loadChapter(cur + 1, true); return; }
+    finish(); return;
+  }
+  const b = blocks[bidx];
+  const myToken = warmToken;
+  const myBlock = bidx;
+  idx = b.from;
+  highlightRange(b.from, b.to);
+  showProgress();
+
+  // Wait for the render queue to reach this block instead of racing it.
+  const waitFor = (warmed > myBlock) ? Promise.resolve() : (renderP[myBlock] || Promise.resolve());
+  if (warmed <= myBlock) statusEl.textContent = 'Rendering…';
+
+  waitFor.then(() => {
+    if (!playing || myToken !== warmToken || myBlock !== bidx) return;   // skipped away
+    const el = current();
+    el.src = sayUrl(b.text);
+    el.playbackRate = +$('rate').value;
+    el.onended = () => {
+      if (!playing) return;
+      pi = 1 - pi;                     // swap to the element already holding the next block
+      bidx++;
+      speakCurrent();
+    };
+    el.onerror = () => {
+      if (!playing) return;
+      noteEl.hidden = false;
+      noteEl.textContent = 'PC voice failed — is Start Server.cmd still running?';
+      playing = false; setButtons();
+    };
+    el.play().catch(err => {
+      // A new src aborts a pending play(); normal when skipping, not a block.
+      if (err && err.name === 'AbortError') return;
+      statusEl.textContent = 'Tap ▶ Play once to allow audio';
+      playing = false; setButtons();
+    });
+    showProgress();
+
+    // preload the next block into the other element once it has been rendered
+    const nxt = blocks[myBlock + 1];
+    if (nxt) {
+      const ready = (warmed > myBlock + 1) ? Promise.resolve() : (renderP[myBlock + 1] || Promise.resolve());
+      ready.then(() => {
+        if (myToken !== warmToken || myBlock !== bidx) return;
+        const other = players[1 - pi];
+        other.src = sayUrl(nxt.text);
+        other.load();
+      }).catch(() => {});
+    }
+  }).catch(() => {});
+}
+
+function speakBrowser() {
+  if (idx >= sentences.length) {
+    if (cur + 1 < chapters.length) { loadChapter(cur + 1, true); return; }
+    finish(); return;
+  }
+  highlight(idx);
+  showProgress();
+  const u = new SpeechSynthesisUtterance(sentences[idx]);
+  const v = voices.find(x => 'br:' + x.name === $('voice').value);
+  if (v) { u.voice = v; u.lang = v.lang; }
+  u.rate = +$('rate').value;
+  u.pitch = +$('pitch').value;
+  u.onend = () => { if (playing) { idx++; speakBrowser(); } };
+  u.onerror = e => {
+    if (e.error === 'interrupted' || e.error === 'canceled') return;
+    if (playing) { idx++; speakBrowser(); }
+  };
+  synth.speak(u);
+}
+
+function play() {
+  if (loading) return;   // button is disabled anyway; keyboard could still reach here
+  if (!synth && !usingPC()) return;
+  if (playing && usingPC() && current().paused) { current().play(); showProgress(); setButtons(); return; }
+  if (!usingPC() && synth.paused && playing) { synth.resume(); showProgress(); setButtons(); return; }
+  if (editable || !spans.length) { render(); idx = Math.min(idx, Math.max(sentences.length - 1, 0)); }
+  if (!sentences.length) {
+    statusEl.textContent = 'Pick a book, or paste some text here';
+    return;
+  }
+  unlockAudio();
+  silence();
+  if (usingPC()) {
+    if (!blocks.length) { buildBlocks(); bidx = blockAt(idx); }
+    if (!warmed) { warmToken++; warmChapter(warmToken, 0); }
+  }
+  playing = true;
+  setButtons();
+  clearInterval(keepAlive);
+  if (!usingPC()) {
+    // Chrome silently stops long sessions; a periodic pause/resume keeps it alive.
+    // PC voices are plain audio files and need none of this.
+    keepAlive = setInterval(() => { if (playing && synth.speaking && !synth.paused) { synth.pause(); synth.resume(); } }, 10000);
+  }
+  speakCurrent();
+}
+
+function silence() {
+  if (synth) synth.cancel();
+  players.forEach(p => { p.pause(); p.onended = p.onerror = null; });
+}
+
+function restartHere() { silence(); if (playing) speakCurrent(); }
+
+function isPaused() { return usingPC() ? current().paused : (synth ? synth.paused : true); }
+
+function stop() {
+  playing = false;
+  clearInterval(keepAlive);
+  silence();
+  idx = 0;
+  spans.forEach(sp => sp.classList.remove('on', 'done'));
+  setButtons();
+}
+
+function finish() {
+  playing = false;
+  clearInterval(keepAlive);
+  silence();
+  idx = 0;
+  spans.forEach(sp => sp.classList.remove('on', 'done'));
+  statusEl.textContent = 'Finished';
+  setButtons();
+}
+
+function step(n) {
+  if (usingPC() && blocks.length) {
+    const nb = bidx + n;
+    if (nb < 0) { if (cur > 0) loadChapter(cur - 1, playing); return; }
+    if (nb >= blocks.length) { if (cur + 1 < chapters.length) loadChapter(cur + 1, playing); return; }
+    bidx = nb;
+    idx = blocks[bidx].from;
+    if (playing) restartHere();
+    else { highlightRange(blocks[bidx].from, blocks[bidx].to); showProgress(); }
+    return;
+  }
+  const next = idx + n;
+  if (next < 0 && cur > 0) {                       // back off the top of a chapter
+    loadChapter(cur - 1, playing);
+    if (!playing) { idx = sentences.length - 1; highlight(idx); showProgress(); }
+    return;
+  }
+  if (next >= sentences.length && cur + 1 < chapters.length) { loadChapter(cur + 1, playing); return; }
+  idx = Math.max(0, Math.min(sentences.length - 1, next));
+  if (playing) restartHere(); else { highlight(idx); showProgress(); }
+}
+
+function setLoading(on, msg) {
+  loading = on;
+  if (msg) statusEl.textContent = msg;
+  setButtons();
+}
+
+// One button. Play -> Stop (holds its place) -> Play (carries on from there).
+function setButtons() {
+  const b = $('play');
+  b.disabled = loading;
+  b.textContent = loading ? '⏳ Loading…'
+    : (playing && !isPaused()) ? '⏹ Stop'
+    : '▶ Play';
+}
+
+function toggle() {
+  if (loading) return;
+  if (playing && !isPaused()) {          // stop where it is, don't reset
+    if (usingPC()) current().pause(); else if (synth) synth.pause();
+    statusEl.textContent = 'Stopped — press Play to carry on';
+    setButtons();
+    return;
+  }
+  play();                                // fresh start, or resume from the same spot
+}
+setButtons();
+
+$('play').onclick = toggle;
+$('menu').onclick = () => document.body.classList.toggle('hide-side');
+
+// editing again after a read
+textEl.addEventListener('dblclick', () => {
+  if (playing) return;
+  const raw = textEl.innerText;
+  textEl.setAttribute('contenteditable', 'true');
+  textEl.textContent = raw;
+  spans = []; editable = true;
+  chapters = []; chapterStart = []; $('chapWrap').hidden = true;
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target === textEl && editable) return;
+  if (e.code === 'Space') { e.preventDefault(); toggle(); }
+  if (e.code === 'ArrowRight') { e.preventDefault(); step(1); }
+  if (e.code === 'ArrowLeft') { e.preventDefault(); step(-1); }
+});
+
+window.addEventListener('beforeunload', () => { if (synth) synth.cancel(); });
+
+// speed slider must retarget live audio, not just the next sentence
+$('rate').addEventListener('input', () => {
+  if (usingPC()) players.forEach(p => { p.playbackRate = +$('rate').value; });
+});
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+loadPcVoices();
+loadLibrary();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "appId": "com.christian.readaloud",
+  "appName": "Read Aloud",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#14161a"
+  },
+  "android": {
+    "backgroundColor": "#14161a"
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -1,0 +1,69 @@
+name: Build iOS app
+
+# Builds an UNSIGNED .ipa on GitHub's free macOS runners, because the dev
+# machine is Windows and iOS builds need a Mac. The .ipa is then signed on the
+# way onto the phone by AltStore/SideStore (free account) or by a paid cert.
+
+on:
+  workflow_dispatch:          # a button in the Actions tab
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch the Kokoro voice model
+        run: |
+          mkdir -p www/model
+          curl -L -o kokoro.tar.bz2 \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2
+          tar -xjf kokoro.tar.bz2 -C www/model --strip-components=1
+          rm kokoro.tar.bz2
+          du -sh www/model
+
+      - name: Add the iOS platform
+        run: npx cap add ios
+
+      - name: Sync web assets
+        run: npx cap sync ios
+
+      - name: Build unsigned archive
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$PWD/build/App.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: Wrap the archive as an .ipa
+        working-directory: ios/App
+        run: |
+          mkdir -p build/Payload
+          cp -R build/App.xcarchive/Products/Applications/App.app build/Payload/
+          cd build && zip -qry ReadAloud-unsigned.ipa Payload
+          ls -lh ReadAloud-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ReadAloud-unsigned-ipa
+          path: ios/App/build/ReadAloud-unsigned.ipa
+          retention-days: 30

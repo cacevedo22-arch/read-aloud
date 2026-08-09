@@ -1,0 +1,8 @@
+node_modules/
+ios/
+android/
+www/model/
+www/books/
+*.ipa
+*.tar.bz2
+.DS_Store
