@@ -70,7 +70,7 @@ public class SherpaTtsPlugin: CAPPlugin, CAPBridgedPlugin {
 
             var modelConfig = SherpaOnnxOfflineTtsModelConfig()
             modelConfig.kokoro = kokoro
-            modelConfig.num_threads = max(2, ProcessInfo.processInfo.activeProcessorCount - 2)
+            modelConfig.num_threads = Int32(max(2, ProcessInfo.processInfo.activeProcessorCount - 2))
             modelConfig.debug = 0
             modelConfig.provider = cEmpty
 
