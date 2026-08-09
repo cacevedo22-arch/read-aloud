@@ -192,6 +192,11 @@
       <label class="f">Cook ahead</label>
       <button id="cookCh" style="width:100%;margin-bottom:6px">Cook this chapter</button>
       <button id="cookBook" style="width:100%">Cook whole book</button>
+      <div id="cookBar" style="margin-top:10px;height:10px;border-radius:6px;background:#2a2f3c;
+           border:1px solid var(--line);overflow:hidden;display:none">
+        <div id="cookFill" style="height:100%;width:0%;background:var(--accent);
+             transition:width .3s ease"></div>
+      </div>
       <div id="cookProg" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
     </div>
 
@@ -1198,23 +1203,28 @@ async function cook(chapterIndexes, label) {
     for (const b of makeBlocks(splitSentences(chapters[ci].text))) jobs.push(b.text);
   }
 
+  $('cookBar').style.display = 'block';
+  $('cookFill').style.width = '0%';
+
   const started = performance.now();
-  let done = 0, madeAudio = 0, spent = 0;
+  let done = 0, spent = 0;
   for (const text of jobs) {
     if (cookCancel) break;
     const t0 = performance.now();
     try { await audioUrlFor(text); } catch (e) { /* keep going; one bad block isn't fatal */ }
     const dt = (performance.now() - t0) / 1000;
     done++;
-    if (dt > 0.05) { spent += dt; madeAudio += dt * (rtfSamples.length ? rtfSamples[rtfSamples.length - 1] : 1.3); }
+    if (dt > 0.05) spent += dt;          // ignore cache hits when judging the rate
 
-    const pct = Math.round(done / jobs.length * 100);
+    const pct = done / jobs.length * 100;
     const rate = spent > 0 ? done / spent : 0;                  // blocks per second
     const left = rate > 0 ? (jobs.length - done) / rate : NaN;
-    $('cookProg').textContent = `${label}: ${pct}% (${done}/${jobs.length}) · about ${fmtMins(left)} left`;
+    $('cookFill').style.width = pct.toFixed(1) + '%';
+    $('cookProg').textContent = `${label}: ${Math.round(pct)}% (${done}/${jobs.length}) · about ${fmtMins(left)} left`;
   }
 
   const mins = (performance.now() - started) / 60000;
+  if (!cookCancel) $('cookFill').style.width = '100%';
   $('cookProg').textContent = cookCancel
     ? `Stopped at ${done}/${jobs.length}. Cooked parts are saved.`
     : `${label} done — ${done} blocks in ${mins.toFixed(1)} min. Plays with no pauses now.`;
